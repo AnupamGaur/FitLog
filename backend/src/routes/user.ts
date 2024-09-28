@@ -3,6 +3,7 @@ import { withAccelerate } from '@prisma/extension-accelerate'
 import { Hono } from 'hono'
 import { sign } from 'hono/jwt'
 import { signininput, signupinput } from '@anupamgaur/common'
+import bcrypt from 'bcrypt'
 export const userRouter = new Hono<{
 Bindings:{
   DATABASE_URL:string,
@@ -21,10 +22,12 @@ userRouter.post('/signup', async (c) => {
         "msg":"Your inputs are not correct."
       })
     }
+    const salt = await bcrypt.genSalt(10);
+    const hashedPassword = await bcrypt.hash(body.password, salt);
     const user = await prisma.user.create({
       data :{
         email : body.email,
-        password : body.password
+        password : hashedPassword
       }
     })
     const token = await sign({
@@ -47,7 +50,6 @@ userRouter.post('/signup', async (c) => {
     const user = await prisma.user.findUnique({
       where : {
         email : body.email,
-        password : body.password,
         }
     })
     if (!user){
@@ -56,6 +58,13 @@ userRouter.post('/signup', async (c) => {
         "msg":'Not a valid User'
       })
     }
+    const isValid = await bcrypt.compare(body.password,user.password)
+    if(!isValid){
+      c.status(403)
+      return c.json({
+        "msg":'Not a valid User'
+        })
+        }
     const token = await sign({
       id: user.id
     },c.env.JWT_SECRET)
